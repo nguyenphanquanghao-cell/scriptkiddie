@@ -1,6 +1,3 @@
-print("Potetium Ultra Loaded")
-
--- Config Globals
 if _G.Cam == nil then _G.Cam = false end
 if _G.Transparent == nil then _G.Transparent = true end
 if _G.Gui == nil then _G.Gui = true end
