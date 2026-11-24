@@ -1,10 +1,11 @@
 if _G.Cam == nil then _G.Cam = false end
 if _G.Transparent == nil then _G.Transparent = true end
-if _G.Gui == nil then _G.Gui = true end
+if _G.Gui == nil then _G.Gui = false end
 if _G.Render3D == nil then _G.Render3D = true end
 if _G.FPSCap == nil then _G.FPSCap = 0 end
 
 if _G.RenderFidelityFlatten == nil then _G.RenderFidelityFlatten = false end
+if _G.PurgeFX == nil then _G.PurgeFX = true end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -13,8 +14,6 @@ local MaterialService = game:GetService("MaterialService")
 local player = Players.LocalPlayer
 
 local isBSS = (game.PlaceId == 1537690962)
-local collectibles = isBSS and workspace:FindFirstChild("Collectibles")
-local flowerZones = isBSS and workspace:FindFirstChild("FlowerZones")
 
 local FRAME_BUDGET = _G.FPSBudget or 0.004
 local TURBO_BUDGET = 0.016
@@ -37,6 +36,8 @@ local DISABLE_CLASSES = {
 	Sound = true, Light = true, PostEffect = true,
 	BloomEffect = true, BlurEffect = true, ColorCorrectionEffect = true,
 	DepthOfFieldEffect = true, SunRaysEffect = true,
+	SurfaceGui = true, BillboardGui = true,
+	SelectionBox = true, SelectionSphere = true,
 }
 
 local PLASTIC = Enum.Material.Plastic
@@ -95,16 +96,54 @@ local function clearMeshTexture(mesh)
 	if mesh.TextureId ~= "" then mesh.TextureId = "" end
 end
 
+-- Effect classes that are safe to actually delete: nothing in BSS looks
+-- these up by child name, unlike Sound ("Song") and Decal.
+local PURGE_CLASSES = {
+	ParticleEmitter = true, Smoke = true, Fire = true,
+	Sparkles = true, Trail = true,
+}
+
+-- "effects" = mute only. "clean" = delete every effect/sound/UI. "nuke" =
+-- delete everything except walkable ground, your own character and the camera.
+local AGGRESSION = _G.Aggression or "nuke"
+
 local function processInstance(inst)
 	if not inst.Parent then return end
 	local character = player.Character
 	if character and inst:IsDescendantOf(character) then return end
-	if isBSS then
-		if collectibles and inst:IsDescendantOf(collectibles) then return end
-		if flowerZones and inst:IsDescendantOf(flowerZones) then return end
+	if inst:IsA("Terrain") or inst == workspace.CurrentCamera then return end
+
+	if AGGRESSION == "nuke" then
+		-- Keep anything that holds the world together: containers, parts,
+		-- joints. Destroying a part (or the weld under an unanchored floor
+		-- tile) is what dropped the player through the map.
+		if inst:IsA("Model") or inst:IsA("Folder") or inst:IsA("JointInstance")
+			or inst:IsA("Constraint") or inst:IsA("WeldConstraint")
+			or inst:IsA("Attachment") or inst:IsA("Bone") then
+			return
+		end
+		if inst:IsA("BasePart") then
+			pcall(flattenPart, inst)
+			return
+		end
+		inst:Destroy()
+		return
 	end
 
 	local class = inst.ClassName
+	if AGGRESSION == "clean" then
+		if DISABLE_CLASSES[class] or inst:IsA("Decal") or inst:IsA("Texture")
+			or inst:IsA("Clothing") or inst:IsA("SurfaceAppearance")
+			or inst:IsA("Atmosphere") or inst:IsA("Sky") or inst:IsA("Clouds")
+			or inst:IsA("PostEffect") or inst:IsA("Light") then
+			inst:Destroy()
+			return
+		end
+	end
+	if PURGE_CLASSES[class] and _G.PurgeFX ~= false then
+		inst:Destroy()
+		return
+	end
 	if DISABLE_CLASSES[class] then
 		pcall(disableEffect, inst)
 	elseif inst:IsA("PostEffect") or inst:IsA("Light") then
@@ -278,6 +317,11 @@ function Optimizer.SetCamera(enabled) applyCamera(enabled and true or false) end
 function Optimizer.SetGui(visible) applyGui(visible and true or false) end
 function Optimizer.SetTransparent(enabled) _G.Transparent = enabled and true or false end
 function Optimizer.SetFidelityFlatten(enabled) _G.RenderFidelityFlatten = enabled and true or false end
+function Optimizer.SetPurgeFX(enabled) _G.PurgeFX = enabled and true or false end
+function Optimizer.SetAggression(level)
+	AGGRESSION = (level == "nuke" or level == "clean") and level or "effects"
+	_G.Aggression = AGGRESSION
+end
 function Optimizer.SetBudget(seconds)
 	FRAME_BUDGET = math.clamp(tonumber(seconds) or 0.004, 0.001, 0.033)
 end
