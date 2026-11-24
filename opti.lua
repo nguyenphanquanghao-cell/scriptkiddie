@@ -1,6 +1,6 @@
 if _G.Cam == nil then _G.Cam = false end
 if _G.Transparent == nil then _G.Transparent = true end
-if _G.Gui == nil then _G.Gui = false end
+if _G.Gui == nil then _G.Gui = true end
 if _G.Render3D == nil then _G.Render3D = true end
 if _G.FPSCap == nil then _G.FPSCap = 0 end
 
@@ -112,6 +112,12 @@ local function processInstance(inst)
 	local character = player.Character
 	if character and inst:IsDescendantOf(character) then return end
 	if inst:IsA("Terrain") or inst == workspace.CurrentCamera then return end
+	-- Never touch any UI: the game's buttons (E prompts, shops, hives) live in
+	-- PlayerGui and in world-space SurfaceGui/BillboardGui. Leave them alone.
+	if inst:IsA("GuiBase2d") or inst:IsA("GuiBase3d") then return end
+	-- Never touch the claimable hives: BSS reads Honeycombs.<Hive>.Cells,
+	-- PrimaryPart and the cell SurfaceGuis by name to render/claim them.
+	if inst:FindFirstAncestor("Honeycombs") then return end
 
 	if AGGRESSION == "nuke" then
 		-- Keep anything that holds the world together: containers, parts,
@@ -119,7 +125,9 @@ local function processInstance(inst)
 		-- tile) is what dropped the player through the map.
 		if inst:IsA("Model") or inst:IsA("Folder") or inst:IsA("JointInstance")
 			or inst:IsA("Constraint") or inst:IsA("WeldConstraint")
-			or inst:IsA("Attachment") or inst:IsA("Bone") then
+			or inst:IsA("Attachment") or inst:IsA("Bone")
+			or inst:IsA("ValueBase") or inst:IsA("ClickDetector")
+			or inst:IsA("ProximityPrompt") then
 			return
 		end
 		if inst:IsA("BasePart") then
@@ -276,35 +284,11 @@ local function applyCamera(enabled)
 	end
 end
 
-local function hideGui(obj)
-	if obj:IsA("GuiObject") then
-		obj.BackgroundTransparency = 1
-		obj.BorderSizePixel = 0
-		if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
-			obj.ImageTransparency = 1
-		end
-	elseif obj:IsA("UIStroke") or obj:IsA("UIGradient") or obj:IsA("UICorner") then
-		pcall(obj.Destroy, obj)
-	end
-end
-
 local function applyGui(visible)
 	_G.Gui = visible
 	pcall(StarterGui.SetCoreGuiEnabled, StarterGui, Enum.CoreGuiType.All, visible)
-	if visible then
-		if connections.gui then
-			connections.gui:Disconnect()
-			connections.gui = nil
-		end
-	elseif not connections.gui then
-		local playerGui = player:FindFirstChildOfClass("PlayerGui") or player:WaitForChild("PlayerGui", 5)
-		if playerGui then
-			for _, obj in ipairs(playerGui:GetDescendants()) do
-				hideGui(obj)
-			end
-			connections.gui = playerGui.DescendantAdded:Connect(hideGui)
-		end
-	end
+	-- The game's own UI is left untouched: buttons, shops and hive panels
+	-- live in PlayerGui, and blanking them breaks the E prompts.
 end
 
 local Optimizer: { [string]: any } = {}
