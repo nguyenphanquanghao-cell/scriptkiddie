@@ -4,6 +4,8 @@ if _G.Gui == nil then _G.Gui = true end
 if _G.Render3D == nil then _G.Render3D = true end
 if _G.FPSCap == nil then _G.FPSCap = 0 end
 
+if _G.RenderFidelityFlatten == nil then _G.RenderFidelityFlatten = false end
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
@@ -52,7 +54,11 @@ local function flattenPart(part)
 	if part.Color ~= GRAY then part.Color = GRAY end
 	if part:IsA("MeshPart") then
 		if part.TextureID ~= "" then part.TextureID = "" end
-		if part.RenderFidelity ~= PERFORMANCE then part.RenderFidelity = PERFORMANCE end
+		-- Only touch RenderFidelity when explicitly enabled; writing it on a
+		-- solid-model MeshPart logs a warning on every streamed instance.
+		if _G.RenderFidelityFlatten and part.RenderFidelity ~= PERFORMANCE then
+			part.RenderFidelity = PERFORMANCE
+		end
 	end
 	if _G.Transparent and part.Transparency ~= 1 then part.Transparency = 1 end
 end
@@ -239,6 +245,7 @@ function Optimizer.SetRender3D(enabled) applyRender3D(enabled and true or false)
 function Optimizer.SetCamera(enabled) applyCamera(enabled and true or false) end
 function Optimizer.SetGui(visible) applyGui(visible and true or false) end
 function Optimizer.SetTransparent(enabled) _G.Transparent = enabled and true or false end
+function Optimizer.SetFidelityFlatten(enabled) _G.RenderFidelityFlatten = enabled and true or false end
 function Optimizer.SetBudget(seconds)
 	FRAME_BUDGET = math.clamp(tonumber(seconds) or 0.004, 0.001, 0.033)
 end
