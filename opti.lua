@@ -26,17 +26,17 @@ local env = (getgenv and getgenv()) or _G
 if env.HakkaOptimizer and env.HakkaOptimizer.Destroy then
 	pcall(env.HakkaOptimizer.Destroy)
 end
-local connections = {}
+local connections: { [string]: any } = {}
 
-local DESTROY_CLASSES = {
-	Decal = true, Texture = true, Clothing = true, SurfaceAppearance = true,
-	PostEffect = true, Light = true, Sound = true, BloomEffect = true,
-	BlurEffect = true, ColorCorrectionEffect = true, DepthOfFieldEffect = true,
-	SunRaysEffect = true, Atmosphere = true, Sky = true, Clouds = true,
-}
+-- Nothing here is destroyed. BSS indexes children by name (part.Decal,
+-- Model.Song, wings.Texture), so a destroyed child throws "not a valid
+-- member". Everything is muted in place instead.
 local DISABLE_CLASSES = {
 	ParticleEmitter = true, Trail = true, Smoke = true, Fire = true,
 	Sparkles = true, Beam = true, Highlight = true,
+	Sound = true, Light = true, PostEffect = true,
+	BloomEffect = true, BlurEffect = true, ColorCorrectionEffect = true,
+	DepthOfFieldEffect = true, SunRaysEffect = true,
 }
 
 local PLASTIC = Enum.Material.Plastic
@@ -44,7 +44,35 @@ local GRAY = Color3.fromRGB(163, 162, 165)
 local PERFORMANCE = Enum.RenderFidelity.Performance
 
 local function disableEffect(inst)
-	if inst.Enabled then inst.Enabled = false end
+	if inst:IsA("Decal") or inst:IsA("Texture") then
+		if inst.Transparency ~= 1 then inst.Transparency = 1 end
+	elseif inst:IsA("Clothing") then
+		if inst.Transparency ~= 1 then inst.Transparency = 1 end
+	elseif inst:IsA("SurfaceAppearance") then
+		if inst.Transparency ~= 1 then inst.Transparency = 1 end
+	elseif inst:IsA("Atmosphere") then
+		if inst.Density ~= 0 then inst.Density = 0 end
+		if inst.Haze ~= 0 then inst.Haze = 0 end
+	elseif inst:IsA("Sky") then
+		pcall(function()
+			inst.SkyboxBk = ""
+			inst.SkyboxDn = ""
+			inst.SkyboxFt = ""
+			inst.SkyboxLf = ""
+			inst.SkyboxRt = ""
+			inst.SkyboxUp = ""
+		end)
+	elseif inst:IsA("Clouds") then
+		if inst.Enabled then inst.Enabled = false end
+	elseif inst:IsA("Sound") then
+		-- Volume=0 instead of Enabled=false: keeps playback and Ended events
+		-- alive, so game logic waiting on a sound never hangs.
+		if inst.Volume ~= 0 then inst.Volume = 0 end
+	else
+		pcall(function()
+			if inst.Enabled then inst.Enabled = false end
+		end)
+	end
 end
 
 local function flattenPart(part)
@@ -77,9 +105,13 @@ local function processInstance(inst)
 	end
 
 	local class = inst.ClassName
-	if DESTROY_CLASSES[class] or inst:IsA("PostEffect") or inst:IsA("Light") then
-		pcall(inst.Destroy, inst)
-	elseif DISABLE_CLASSES[class] then
+	if DISABLE_CLASSES[class] then
+		pcall(disableEffect, inst)
+	elseif inst:IsA("PostEffect") or inst:IsA("Light") then
+		pcall(disableEffect, inst)
+	elseif inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("Clothing")
+		or inst:IsA("SurfaceAppearance") or inst:IsA("Atmosphere")
+		or inst:IsA("Sky") or inst:IsA("Clouds") then
 		pcall(disableEffect, inst)
 	elseif inst:IsA("BasePart") then
 		pcall(flattenPart, inst)
@@ -236,7 +268,7 @@ local function applyGui(visible)
 	end
 end
 
-local Optimizer = {}
+local Optimizer: { [string]: any } = {}
 
 function Optimizer.SetFPSCap(value)
 	_G.FPSCap = math.clamp(tonumber(value) or 0, 0, 1000)
