@@ -27,9 +27,6 @@ if env.HakkaOptimizer and env.HakkaOptimizer.Destroy then
 end
 local connections: { [string]: any } = {}
 
--- Nothing here is destroyed. BSS indexes children by name (part.Decal,
--- Model.Song, wings.Texture), so a destroyed child throws "not a valid
--- member". Everything is muted in place instead.
 local DISABLE_CLASSES = {
 	ParticleEmitter = true, Trail = true, Smoke = true, Fire = true,
 	Sparkles = true, Beam = true, Highlight = true,
@@ -66,8 +63,7 @@ local function disableEffect(inst)
 	elseif inst:IsA("Clouds") then
 		if inst.Enabled then inst.Enabled = false end
 	elseif inst:IsA("Sound") then
-		-- Volume=0 instead of Enabled=false: keeps playback and Ended events
-		-- alive, so game logic waiting on a sound never hangs.
+
 		if inst.Volume ~= 0 then inst.Volume = 0 end
 	else
 		pcall(function()
@@ -83,8 +79,7 @@ local function flattenPart(part)
 	if part.Color ~= GRAY then part.Color = GRAY end
 	if part:IsA("MeshPart") then
 		if part.TextureID ~= "" then part.TextureID = "" end
-		-- Only touch RenderFidelity when explicitly enabled; writing it on a
-		-- solid-model MeshPart logs a warning on every streamed instance.
+
 		if _G.RenderFidelityFlatten and part.RenderFidelity ~= PERFORMANCE then
 			part.RenderFidelity = PERFORMANCE
 		end
@@ -96,15 +91,11 @@ local function clearMeshTexture(mesh)
 	if mesh.TextureId ~= "" then mesh.TextureId = "" end
 end
 
--- Effect classes that are safe to actually delete: nothing in BSS looks
--- these up by child name, unlike Sound ("Song") and Decal.
 local PURGE_CLASSES = {
 	ParticleEmitter = true, Smoke = true, Fire = true,
 	Sparkles = true, Trail = true,
 }
 
--- "effects" = mute only. "clean" = delete every effect/sound/UI. "nuke" =
--- delete everything except walkable ground, your own character and the camera.
 local AGGRESSION = _G.Aggression or "nuke"
 
 local function processInstance(inst)
@@ -112,17 +103,13 @@ local function processInstance(inst)
 	local character = player.Character
 	if character and inst:IsDescendantOf(character) then return end
 	if inst:IsA("Terrain") or inst == workspace.CurrentCamera then return end
-	-- Never touch any UI: the game's buttons (E prompts, shops, hives) live in
-	-- PlayerGui and in world-space SurfaceGui/BillboardGui. Leave them alone.
+
 	if inst:IsA("GuiBase2d") or inst:IsA("GuiBase3d") then return end
-	-- Never touch the claimable hives: BSS reads Honeycombs.<Hive>.Cells,
-	-- PrimaryPart and the cell SurfaceGuis by name to render/claim them.
+
 	if inst:FindFirstAncestor("Honeycombs") then return end
 
 	if AGGRESSION == "nuke" then
-		-- Keep anything that holds the world together: containers, parts,
-		-- joints. Destroying a part (or the weld under an unanchored floor
-		-- tile) is what dropped the player through the map.
+
 		if inst:IsA("Model") or inst:IsA("Folder") or inst:IsA("JointInstance")
 			or inst:IsA("Constraint") or inst:IsA("WeldConstraint")
 			or inst:IsA("Attachment") or inst:IsA("Bone")
@@ -287,8 +274,7 @@ end
 local function applyGui(visible)
 	_G.Gui = visible
 	pcall(StarterGui.SetCoreGuiEnabled, StarterGui, Enum.CoreGuiType.All, visible)
-	-- The game's own UI is left untouched: buttons, shops and hive panels
-	-- live in PlayerGui, and blanking them breaks the E prompts.
+
 end
 
 local Optimizer: { [string]: any } = {}
