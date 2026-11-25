@@ -79,7 +79,8 @@ local function flattenPart(part)
 	if part.Color ~= GRAY then part.Color = GRAY end
 	if part:IsA("MeshPart") then
 		if part.TextureID ~= "" then part.TextureID = "" end
-
+		-- Only touch RenderFidelity when explicitly enabled; writing it on a
+		-- solid-model MeshPart logs a warning on every streamed instance.
 		if _G.RenderFidelityFlatten and part.RenderFidelity ~= PERFORMANCE then
 			part.RenderFidelity = PERFORMANCE
 		end
@@ -117,11 +118,29 @@ local function processInstance(inst)
 			or inst:IsA("ProximityPrompt") then
 			return
 		end
+
+		if inst:IsA("BodyMover") then
+			return
+		end
+		if inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("Clothing")
+			or inst:IsA("SurfaceAppearance") then
+			pcall(disableEffect, inst)
+			return
+		end
+
+		if inst:IsA("Light") or inst:IsA("PostEffect")
+			or DISABLE_CLASSES[inst.ClassName] then
+			pcall(disableEffect, inst)
+			return
+		end
 		if inst:IsA("BasePart") then
 			pcall(flattenPart, inst)
 			return
 		end
-		inst:Destroy()
+
+		pcall(function()
+			if inst.Enabled ~= nil then inst.Enabled = false end
+		end)
 		return
 	end
 
@@ -131,12 +150,13 @@ local function processInstance(inst)
 			or inst:IsA("Clothing") or inst:IsA("SurfaceAppearance")
 			or inst:IsA("Atmosphere") or inst:IsA("Sky") or inst:IsA("Clouds")
 			or inst:IsA("PostEffect") or inst:IsA("Light") then
-			inst:Destroy()
+			pcall(disableEffect, inst)
 			return
 		end
 	end
 	if PURGE_CLASSES[class] and _G.PurgeFX ~= false then
-		inst:Destroy()
+
+		pcall(disableEffect, inst)
 		return
 	end
 	if DISABLE_CLASSES[class] then
